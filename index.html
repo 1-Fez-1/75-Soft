@@ -65,6 +65,17 @@
   .grid .today{outline:2px solid var(--accent);outline-offset:1px}
   .grid .sel{box-shadow:inset 0 0 0 2px var(--ink)}
   .grid .future{opacity:.45;cursor:default}
+  .grid div{position:relative}
+  .grid .mile::after{content:"⭐";position:absolute;top:-7px;right:-5px;font-size:11px}
+  .grid .weigh::after{content:"";position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+  .mile-line{margin:-6px 4px 14px;font-size:13px;color:var(--muted);text-align:center}
+  .weight{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .weight input[type=number]{width:110px;padding:7px 10px}
+  .weight span{font-size:13px;color:var(--muted)}
+  .wrow{display:flex;justify-content:space-between;padding:8px 2px;border-top:1px solid var(--line);font-size:15px}
+  .wrow:first-child{border-top:0}
+  .wrow span{color:var(--muted);flex:1}
+  .wrow em{font-style:normal;color:var(--muted);font-size:13px;width:80px;text-align:right}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .banner{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:12px}
@@ -121,6 +132,7 @@
         <div class="stat"><b id="sLeft">75</b><span>days to go</span></div>
       </div>
     </div>
+    <p id="sMile" class="mile-line"></p>
 
     <div class="card">
       <div id="banner" class="banner hidden"></div>
@@ -130,8 +142,8 @@
         <button id="next" aria-label="Next day">›</button>
       </div>
       <div id="tasks"></div>
-      <p class="label" style="margin-top:16px">Notes</p>
-      <textarea id="note" placeholder="How did today feel? What did you read?"></textarea>
+      <p class="label" style="margin-top:16px">Journal</p>
+      <textarea id="note" placeholder="How did today feel? What are you grateful for? What did you read?"></textarea>
     </div>
 
     <div class="card">
@@ -141,7 +153,14 @@
         <span><i style="background:var(--done)"></i>All done</span>
         <span><i style="background:var(--done-soft)"></i>Some done</span>
         <span><i style="background:var(--miss)"></i>Missed</span>
+        <span>⭐ Milestone</span>
+        <span>• Weigh-in</span>
       </div>
+    </div>
+
+    <div class="card hidden" id="weightsCard">
+      <p class="label">Weigh-ins</p>
+      <div id="weights"></div>
     </div>
   </section>
 </main>
@@ -149,7 +168,8 @@
 <dialog id="settings"><div class="inner">
   <h2 style="margin-top:0">Settings</h2>
   <div class="field"><label for="setStart">Day 1</label><input type="date" id="setStart"></div>
-  <div class="field"><label for="setWater">Water goal (glasses of 375 ml ≈ 3 L)</label><input type="number" id="setWater" min="1" max="16"></div>
+  <div class="field"><label for="setWater">Water goal (glasses of 250 ml — 8 = 2 L)</label><input type="number" id="setWater" min="1" max="16"></div>
+  <div class="field"><label for="setUnit">Weight unit</label><input type="text" id="setUnit" maxlength="5" placeholder="kg"></div>
   <p class="label">Daily rules</p>
   <div id="setRules"></div>
   <button class="btn ghost" id="setAddRule" style="margin-bottom:18px">+ Add rule</button>
@@ -166,14 +186,23 @@
 </div></dialog>
 
 <script>
-const KEY = "soft75:v1";
+const KEY = "soft75:v2";
 const TOTAL = 75;
+const MILESTONE = 15;
 const DEFAULT_RULES = [
-  {id:"eat",   title:"Eat well", sub:"Alcohol only on social occasions"},
-  {id:"move",  title:"45 min of movement", sub:"One day a week can be active recovery"},
-  {id:"water", title:"Drink 3 L of water", sub:"Tap the glasses as you go", water:true},
-  {id:"read",  title:"Read 10 pages", sub:"Any book counts"}
+  {id:"water",   title:"Drink 2 L of water", sub:"Tap a glass for each 250 ml", water:true},
+  {id:"cardio",  title:"30 min zone 2 cardio", sub:"Easy pace, you can still hold a conversation"},
+  {id:"meals",   title:"Regular, balanced meals", sub:"Protein, veg, slow carbs"},
+  {id:"read",    title:"Read 10 pages", sub:"Any book counts"},
+  {id:"sleep",   title:"Prioritise sleep & self-care", sub:"Wind down, rest, look after you"},
+  {id:"future",  title:"10 min for future me", sub:"One small thing your future self will thank you for"},
+  {id:"journal", title:"Journal entry", sub:"Write it in the journal box below", journal:true},
+  {id:"supps",   title:"Take supplements", sub:""},
+  {id:"weigh",   title:"Weigh-in & progress photo", sub:"Every 7 days", every:7, weight:true}
 ];
+const appliesTo = (r, n) => !r.every || n % r.every === 0;
+const rulesFor = n => S.rules.filter(r => appliesTo(r, n));
+const isMilestone = n => n % MILESTONE === 0;
 
 const store = {
   load(){ try { return JSON.parse(localStorage.getItem(KEY)) } catch(e){ return null } },
@@ -193,10 +222,13 @@ function todayIndex(){
 }
 const rec = n => (S.days[n] ||= {done:{}, water:0, note:""});
 function isDone(n, r){ const d = S.days[n]; if(!d) return false;
-  return r.water ? d.water >= S.waterGoal : !!d.done[r.id]; }
+  if(r.water) return d.water >= S.waterGoal;
+  if(r.journal) return !!(d.note && d.note.trim());
+  return !!d.done[r.id]; }
 function dayStatus(n){
-  const c = S.rules.filter(r => isDone(n,r)).length;
-  return c === S.rules.length ? "full" : c > 0 ? "part" : "none";
+  const rs = rulesFor(n);
+  const c = rs.filter(r => isDone(n,r)).length;
+  return c === rs.length ? "full" : c > 0 ? "part" : "none";
 }
 
 /* ---------- setup & rule editors ---------- */
@@ -225,7 +257,7 @@ $("addRule").onclick = () => { draftRules.push(newRule()); ruleEditor($("setupRu
 $("begin").onclick = () => {
   const rules = cleanRules(draftRules);
   if(!rules.length) return alertBanner("Add at least one rule.");
-  S = {start:$("startDate").value || isoLocal(new Date()), rules, waterGoal:8, days:{}};
+  S = {start:$("startDate").value || isoLocal(new Date()), rules, waterGoal:8, unit:"kg", days:{}};
   store.save(S); boot();
 };
 
@@ -260,7 +292,16 @@ function render(){
   const b = $("banner");
   if(t < 1){ b.textContent = `Your challenge starts in ${1-t} day${1-t===1?"":"s"}. You can plan ahead below.`; b.classList.remove("hidden"); }
   else if(t > TOTAL){ b.textContent = `You finished all 75 days — ${full} of them perfect. 🎉`; b.classList.remove("hidden"); }
+  else if(isMilestone(viewDay)){
+    const done = dayStatus(viewDay) === "full";
+    b.textContent = viewDay === TOTAL
+      ? (done ? "Day 75 — you did it! The whole challenge, done. 🏆" : "Final day! Finish strong. 🏆")
+      : (done ? `Milestone reached: ${viewDay} days down, ${TOTAL-viewDay} to go. ⭐` : `Milestone day ${viewDay}! Tick everything off to celebrate. ⭐`);
+    b.classList.remove("hidden");
+  }
   else b.classList.add("hidden");
+  const nextM = Math.min(TOTAL, Math.ceil(Math.max(t,1)/MILESTONE)*MILESTONE);
+  $("sMile").textContent = t > TOTAL ? "Challenge complete" : nextM === t ? "Milestone today ⭐" : (d => `Next milestone: day ${nextM} (${d === 1 ? "tomorrow" : `in ${d} days`})`)(nextM - Math.max(t,1));
 
   // day nav
   const d = dayDate(viewDay);
@@ -271,14 +312,26 @@ function render(){
 
   // tasks
   const box = $("tasks"); box.innerHTML = "";
-  S.rules.forEach(r => {
+  rulesFor(viewDay).forEach(r => {
     const on = isDone(viewDay, r);
     const el = document.createElement("div");
     el.className = "task" + (on ? " on" : "");
+    const w = S.days[viewDay]?.weight ?? "";
     el.innerHTML = `<div class="check"></div><div class="t"><b>${esc(r.title)}</b>${r.sub?`<span>${esc(r.sub)}</span>`:""}
-      ${r.water ? `<div class="water">${Array.from({length:S.waterGoal},(_,i)=>`<i data-i="${i}" class="${i < (S.days[viewDay]?.water||0) ? "f":""}"></i>`).join("")}</div>` : ""}</div>`;
+      ${r.water ? `<div class="water">${Array.from({length:S.waterGoal},(_,i)=>`<i data-i="${i}" class="${i < (S.days[viewDay]?.water||0) ? "f":""}"></i>`).join("")}</div>` : ""}
+      ${r.weight ? `<div class="weight"><input type="number" step="0.1" inputmode="decimal" placeholder="Weight" value="${w}"> <span>${S.unit||"kg"}</span></div>` : ""}</div>`;
+    if(r.weight){
+      const inp = el.querySelector("input");
+      inp.onclick = e => e.stopPropagation();
+      inp.onchange = e => { const v = parseFloat(e.target.value); const rd = rec(viewDay);
+        const wasFull = dayStatus(viewDay) === "full";
+        if(isNaN(v)) delete rd.weight; else { rd.weight = v; rd.done[r.id] = true; }
+        store.save(S); render();
+        if(!wasFull && dayStatus(viewDay) === "full") celebrate(isMilestone(viewDay)); };
+    }
     el.onclick = e => {
       const rd = rec(viewDay);
+      if(r.journal){ $("note").focus(); return; }
       if(r.water){
         const gi = e.target.dataset.i;
         if(gi !== undefined){ const v = +gi + 1; rd.water = rd.water === v ? v - 1 : v; }
@@ -286,7 +339,7 @@ function render(){
       } else rd.done[r.id] = !rd.done[r.id];
       const wasFull = el.dataset.full === "1";
       store.save(S); render();
-      if(!wasFull && dayStatus(viewDay) === "full") celebrate();
+      if(!wasFull && dayStatus(viewDay) === "full") celebrate(isMilestone(viewDay));
     };
     el.dataset.full = dayStatus(viewDay) === "full" ? "1" : "0";
     box.appendChild(el);
@@ -301,20 +354,46 @@ function render(){
     if(n > t) c.classList.add("future");
     else c.classList.add(st === "full" ? "full" : st === "part" ? "part" : (n < t ? "miss" : "x"));
     if(n === t) c.classList.add("today");
+    if(isMilestone(n)) c.classList.add("mile");
+    if(S.rules.some(r => r.every && appliesTo(r, n)) && !isMilestone(n)) c.classList.add("weigh");
     if(n === viewDay) c.classList.add("sel");
     if(n <= Math.max(t,1)) c.onclick = () => { viewDay = n; render(); window.scrollTo({top:0, behavior:"smooth"}); };
     g.appendChild(c);
   }
+  renderWeights();
 }
 
-$("note").oninput = e => { rec(viewDay).note = e.target.value; store.save(S); };
+function renderWeights(){
+  const entries = Object.entries(S.days).filter(([,d]) => typeof d.weight === "number")
+    .map(([n,d]) => [+n, d.weight]).sort((a,b) => a[0]-b[0]);
+  const card = $("weightsCard");
+  if(!entries.length){ card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const u = S.unit || "kg", first = entries[0][1];
+  $("weights").innerHTML = entries.map(([n,v],i) => {
+    const diff = i ? +(v - first).toFixed(1) : null;
+    return `<div class="wrow"><span>Day ${n}</span><b>${v} ${u}</b><em>${diff === null ? "start" : (diff > 0 ? "+" : "") + diff + " " + u}</em></div>`;
+  }).join("");
+}
+
+$("note").oninput = e => {
+  const before = dayStatus(viewDay);
+  rec(viewDay).note = e.target.value; store.save(S);
+  const after = dayStatus(viewDay);
+  // re-render tasks only when the journal tick changes, so typing isn't interrupted
+  const jr = S.rules.find(r => r.journal);
+  const box = [...$("tasks").children][rulesFor(viewDay).indexOf(jr)];
+  if(box) box.classList.toggle("on", isDone(viewDay, jr));
+  if(before !== after){ const pos = e.target.selectionStart; render(); $("note").focus(); $("note").setSelectionRange(pos,pos);
+    if(after === "full") celebrate(isMilestone(viewDay)); }
+};
 $("prev").onclick = () => { viewDay--; render(); };
 $("next").onclick = () => { viewDay++; render(); };
 
-function celebrate(){
+function celebrate(big){
   const wrap = document.createElement("div"); wrap.className = "confetti";
   const colors = ["#c8734f","#6f9a7c","#7fb3d5","#e8b84a","#d98fa8"];
-  for(let i=0;i<60;i++){ const p = document.createElement("i");
+  for(let i=0;i<(big?180:60);i++){ const p = document.createElement("i");
     p.style.left = Math.random()*100+"vw"; p.style.background = colors[i%colors.length];
     p.style.animationDelay = Math.random()*.4+"s"; p.style.animationDuration = 1.2+Math.random()*.9+"s";
     wrap.appendChild(p); }
@@ -326,7 +405,7 @@ function alertBanner(msg){ const b = document.createElement("div"); b.className=
 /* ---------- settings ---------- */
 let editRules = [];
 $("openSettings").onclick = () => {
-  $("setStart").value = S.start; $("setWater").value = S.waterGoal;
+  $("setStart").value = S.start; $("setWater").value = S.waterGoal; $("setUnit").value = S.unit || "kg";
   editRules = S.rules.map(r => ({...r})); ruleEditor($("setRules"), editRules);
   $("settings").showModal();
 };
@@ -336,6 +415,7 @@ $("saveSettings").onclick = () => {
   const rules = cleanRules(editRules); if(!rules.length) return;
   S.start = $("setStart").value || S.start;
   S.waterGoal = Math.min(16, Math.max(1, +$("setWater").value || 8));
+  S.unit = $("setUnit").value.trim() || "kg";
   S.rules = rules; store.save(S); $("settings").close(); boot();
 };
 $("resetBtn").onclick = () => {

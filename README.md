@@ -2,11 +2,18 @@
 
 A simple, private tracker for the 75 Soft challenge. Runs entirely in your browser — progress is saved on your device (use **Settings → Export data** to back it up).
 
-**Daily rules (editable in Settings):**
-- Eat well, alcohol only on social occasions
-- 45 minutes of movement (one active-recovery day a week)
-- Drink 3 L of water
+**Daily commitments (editable in Settings):**
+- Drink 2 L of water
+- 30 min zone 2 cardio
+- Regular, balanced meals
 - Read 10 pages
+- Prioritise sleep & self-care
+- 10 minutes for future me
+- Journal entry
+- Take supplements
+- Weigh-in & progress photo every 7 days
+
+Milestones are marked at days 15, 30, 45, 60 and 75.
 
 ## Hosting on GitHub Pages
 1. Repo **Settings → Pages**
