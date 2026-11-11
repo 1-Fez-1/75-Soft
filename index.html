@@ -76,6 +76,20 @@
   .wrow:first-child{border-top:0}
   .wrow span{color:var(--muted);flex:1}
   .wrow em{font-style:normal;color:var(--muted);font-size:13px;width:80px;text-align:right}
+  main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:8px;
+    padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line);z-index:5}
+  .tabbar button{flex:1;max-width:200px;background:none;border:0;border-radius:12px;padding:8px;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .tabbar button span{font-size:20px;line-height:1}
+  .tabbar button.active{color:var(--accent);background:var(--accent-soft)}
+  .journal-box{min-height:58vh;font-size:17px;line-height:1.6;padding:14px 16px}
+  .prompt{margin:0 0 10px;font-size:14px;color:var(--muted);font-style:italic;text-align:center}
+  .jmeta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px}
+  .entry{padding:10px 2px;border-top:1px solid var(--line);cursor:pointer}
+  .entry:first-child{border-top:0}
+  .entry b{font-size:14px}
+  .entry b small{color:var(--muted);font-weight:400;margin-left:6px}
+  .entry p{margin:3px 0 0;font-size:14px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .banner{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:12px}
@@ -142,8 +156,6 @@
         <button id="next" aria-label="Next day">›</button>
       </div>
       <div id="tasks"></div>
-      <p class="label" style="margin-top:16px">Journal</p>
-      <textarea id="note" placeholder="How did today feel? What are you grateful for? What did you read?"></textarea>
     </div>
 
     <div class="card">
@@ -163,7 +175,30 @@
       <div id="weights"></div>
     </div>
   </section>
+
+  <!-- Journal tab -->
+  <section id="journal" class="hidden">
+    <div class="card">
+      <div class="daynav">
+        <button id="jprev" aria-label="Previous day">‹</button>
+        <h2 id="jTitle">Day 1<small></small></h2>
+        <button id="jnext" aria-label="Next day">›</button>
+      </div>
+      <p class="prompt" id="jPrompt"></p>
+      <textarea id="note" class="journal-box" placeholder="Start writing…"></textarea>
+      <div class="jmeta"><span id="jWords">0 words</span><span id="jSaved"></span></div>
+    </div>
+    <div class="card" id="entriesCard">
+      <p class="label">Past entries</p>
+      <div id="entries"></div>
+    </div>
+  </section>
 </main>
+
+<nav class="tabbar hidden" id="tabbar">
+  <button data-tab="app" class="active"><span>✓</span>Today</button>
+  <button data-tab="journal"><span>✎</span>Journal</button>
+</nav>
 
 <dialog id="settings"><div class="inner">
   <h2 style="margin-top:0">Settings</h2>
@@ -196,7 +231,7 @@ const DEFAULT_RULES = [
   {id:"read",    title:"Read 10 pages", sub:"Any book counts"},
   {id:"sleep",   title:"Prioritise sleep & self-care", sub:"Wind down, rest, look after you"},
   {id:"future",  title:"10 min for future me", sub:"One small thing your future self will thank you for"},
-  {id:"journal", title:"Journal entry", sub:"Write it in the journal box below", journal:true},
+  {id:"journal", title:"Journal entry", sub:"Tap to open the Journal tab", journal:true},
   {id:"supps",   title:"Take supplements", sub:""},
   {id:"weigh",   title:"Weigh-in & progress photo", sub:"Every 7 days", every:7, weight:true}
 ];
@@ -249,7 +284,7 @@ const newRule = () => ({id:"r"+Date.now().toString(36), title:"", sub:""});
 
 let draftRules = DEFAULT_RULES.map(r => ({...r}));
 function showSetup(){
-  $("setup").classList.remove("hidden"); $("app").classList.add("hidden"); $("openSettings").classList.add("hidden");
+  $("setup").classList.remove("hidden"); $("app").classList.add("hidden"); $("openSettings").classList.add("hidden"); $("tabbar").classList.add("hidden"); $("journal").classList.add("hidden");
   $("startDate").value = isoLocal(new Date());
   ruleEditor($("setupRules"), draftRules);
 }
@@ -263,7 +298,7 @@ $("begin").onclick = () => {
 
 /* ---------- main render ---------- */
 function boot(){
-  $("setup").classList.add("hidden"); $("app").classList.remove("hidden"); $("openSettings").classList.remove("hidden");
+  $("setup").classList.add("hidden"); $("app").classList.remove("hidden"); $("openSettings").classList.remove("hidden"); $("tabbar").classList.remove("hidden"); $("journal").classList.add("hidden"); currentTab = "app"; document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === "app"));
   const t = todayIndex();
   viewDay = Math.min(Math.max(t,1), TOTAL);
   render();
@@ -331,7 +366,7 @@ function render(){
     }
     el.onclick = e => {
       const rd = rec(viewDay);
-      if(r.journal){ $("note").focus(); return; }
+      if(r.journal){ showTab("journal"); $("note").focus(); return; }
       if(r.water){
         const gi = e.target.dataset.i;
         if(gi !== undefined){ const v = +gi + 1; rd.water = rd.water === v ? v - 1 : v; }
@@ -344,8 +379,6 @@ function render(){
     el.dataset.full = dayStatus(viewDay) === "full" ? "1" : "0";
     box.appendChild(el);
   });
-  $("note").value = S.days[viewDay]?.note || "";
-
   // grid
   const g = $("grid"); g.innerHTML = "";
   for(let n=1; n<=TOTAL; n++){
@@ -376,19 +409,62 @@ function renderWeights(){
   }).join("");
 }
 
+/* ---------- journal tab ---------- */
+const PROMPTS = [
+  "How did today feel?", "What are you grateful for today?", "What's one win from today, big or small?",
+  "What did your future self thank you for today?", "What drained you, and what filled you up?",
+  "What did you read today, and what stuck with you?", "How did your body feel today?",
+  "What would make tomorrow great?", "What are you proud of this week?"
+];
+const words = s => (s.trim().match(/\S+/g) || []).length;
+function renderJournal(){
+  const t = todayIndex();
+  const d = dayDate(viewDay);
+  const label = viewDay === t ? "Today" : d.toLocaleDateString(undefined,{weekday:"short", day:"numeric", month:"short"});
+  $("jTitle").innerHTML = `Day ${viewDay}<small>${label}</small>`;
+  $("jprev").disabled = viewDay <= 1;
+  $("jnext").disabled = viewDay >= TOTAL || viewDay >= Math.max(t,1);
+  $("jPrompt").textContent = PROMPTS[(viewDay - 1) % PROMPTS.length];
+  const note = S.days[viewDay]?.note || "";
+  $("note").value = note;
+  $("jWords").textContent = `${words(note)} words`;
+  $("jSaved").textContent = "";
+  renderEntries();
+}
+function renderEntries(){
+  const list = Object.entries(S.days).filter(([n,d]) => d.note && d.note.trim() && +n !== viewDay)
+    .map(([n,d]) => [+n, d.note.trim()]).sort((a,b) => b[0]-a[0]);
+  $("entriesCard").classList.toggle("hidden", !list.length);
+  $("entries").innerHTML = list.map(([n,txt]) =>
+    `<div class="entry" data-n="${n}"><b>Day ${n}<small>${dayDate(n).toLocaleDateString(undefined,{day:"numeric", month:"short"})}</small></b><p>${esc(txt)}</p></div>`).join("");
+  $("entries").querySelectorAll(".entry").forEach(el => el.onclick = () => {
+    viewDay = +el.dataset.n; render(); renderJournal(); window.scrollTo({top:0, behavior:"smooth"}); });
+}
+let savedTimer;
 $("note").oninput = e => {
   const before = dayStatus(viewDay);
   rec(viewDay).note = e.target.value; store.save(S);
-  const after = dayStatus(viewDay);
-  // re-render tasks only when the journal tick changes, so typing isn't interrupted
-  const jr = S.rules.find(r => r.journal);
-  const box = [...$("tasks").children][rulesFor(viewDay).indexOf(jr)];
-  if(box) box.classList.toggle("on", isDone(viewDay, jr));
-  if(before !== after){ const pos = e.target.selectionStart; render(); $("note").focus(); $("note").setSelectionRange(pos,pos);
-    if(after === "full") celebrate(isMilestone(viewDay)); }
+  $("jWords").textContent = `${words(e.target.value)} words`;
+  $("jSaved").textContent = "Saved ✓"; clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => $("jSaved").textContent = "", 1500);
+  if(dayStatus(viewDay) !== before){ render(); if(dayStatus(viewDay) === "full") celebrate(isMilestone(viewDay)); }
 };
 $("prev").onclick = () => { viewDay--; render(); };
 $("next").onclick = () => { viewDay++; render(); };
+$("jprev").onclick = () => { viewDay--; render(); renderJournal(); };
+$("jnext").onclick = () => { viewDay++; render(); renderJournal(); };
+
+/* ---------- tabs ---------- */
+let currentTab = "app";
+function showTab(name){
+  currentTab = name;
+  $("app").classList.toggle("hidden", name !== "app");
+  $("journal").classList.toggle("hidden", name !== "journal");
+  document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  if(name === "journal") renderJournal(); else render();
+  window.scrollTo({top:0});
+}
+document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 function celebrate(big){
   const wrap = document.createElement("div"); wrap.className = "confetti";
