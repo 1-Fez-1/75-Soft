@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f4efe8">
 <meta name="color-scheme" content="only light">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,6 +18,11 @@
     color-scheme: only light;
   }
   *{box-sizing:border-box}
+  html,body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  input,textarea,select{font-size:16px!important}
+  .tickall{display:block;margin:14px auto 0;background:var(--done-soft);color:var(--ink);border:0;border-radius:12px;padding:11px 18px;font:inherit;font-weight:600;cursor:pointer;width:100%}
+  .tickall.undo{background:var(--bg);color:var(--muted);border:1px solid var(--line);font-weight:500}
+  .locked + .tickall{display:none}
   body{margin:0;background:var(--bg);color:var(--ink);
     font:16px/1.45 ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",sans-serif;
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
@@ -163,6 +168,7 @@
         <button id="next" aria-label="Next day">›</button>
       </div>
       <div id="tasks"></div>
+      <button class="tickall" id="tickAll">Tick all</button>
     </div>
 
     <div class="card">
@@ -265,7 +271,7 @@ function todayIndex(){
 const rec = n => (S.days[n] ||= {done:{}, water:0, note:""});
 function isDone(n, r){ const d = S.days[n]; if(!d) return false;
   if(r.water) return d.water >= S.waterGoal;
-  if(r.journal) return !!(d.note && d.note.trim());
+  if(r.journal) return !!(d.note && d.note.trim()) || !!d.done[r.id];
   return !!d.done[r.id]; }
 function dayStatus(n){
   const rs = rulesFor(n);
@@ -394,6 +400,10 @@ function render(){
     el.dataset.full = dayStatus(viewDay) === "full" ? "1" : "0";
     box.appendChild(el);
   });
+  const allDone = dayStatus(viewDay) === "full";
+  $("tickAll").textContent = allDone ? "Untick all" : "Tick all";
+  $("tickAll").classList.toggle("undo", allDone);
+
   // grid
   const g = $("grid"); g.innerHTML = "";
   for(let n=1; n<=TOTAL; n++){
@@ -469,6 +479,20 @@ $("note").oninput = e => {
 const goToday = () => { viewDay = Math.min(Math.max(todayIndex(),1), TOTAL); render(); if(currentTab === "journal") renderJournal(); };
 $("dayTitle").onclick = goToday;
 $("jTitle").onclick = goToday;
+$("tickAll").onclick = () => {
+  if(viewDay > todayIndex()) return;
+  const rd = rec(viewDay);
+  if(dayStatus(viewDay) === "full"){
+    rulesFor(viewDay).forEach(r => { if(r.water) rd.water = 0; else rd.done[r.id] = false; });
+    store.save(S); render();
+  } else {
+    rulesFor(viewDay).forEach(r => { if(r.water) rd.water = S.waterGoal; else rd.done[r.id] = true; });
+    store.save(S); render(); celebrate(isMilestone(viewDay));
+  }
+};
+// block pinch-zoom on iOS Safari, which ignores user-scalable=no
+["gesturestart","gesturechange","gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {passive:false}));
+document.addEventListener("touchmove", e => { if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
 $("prev").onclick = () => { viewDay--; render(); };
 $("next").onclick = () => { viewDay++; render(); };
 $("jprev").onclick = () => { viewDay--; render(); renderJournal(); };
