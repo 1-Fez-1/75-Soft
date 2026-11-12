@@ -3,7 +3,7 @@
 A simple, private tracker for the 75 Soft challenge. Runs entirely in your browser — progress is saved on your device (use **Settings → Export data** to back it up).
 
 **Daily commitments (editable in Settings):**
-- Drink 2 L of water
+- Drink 2 L of water (two 1 L bottles)
 - 30 min zone 2 cardio
 - Regular, balanced meals
 - Read 10 pages
