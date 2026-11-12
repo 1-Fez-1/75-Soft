@@ -41,9 +41,10 @@
   .ring .num{position:absolute;inset:0;display:grid;place-items:center;text-align:center;line-height:1}
   .ring .num b{font-size:30px;display:block}
   .ring .num small{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;flex:1}
-  .stat b{font-size:20px;display:block}
-  .stat span{font-size:12px;color:var(--muted)}
+  .stats{flex:1;display:flex;justify-content:center;border-left:1px solid var(--line);align-self:stretch;align-items:center}
+  .stat{text-align:center}
+  .stat b{font-size:40px;line-height:1;display:block}
+  .stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .daynav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .daynav h2{font-size:18px;margin:0;text-align:center}
   .daynav h2 small{display:block;font-size:12px;color:var(--muted);font-weight:400}
@@ -163,13 +164,10 @@
       <div class="ring">
         <svg width="96" height="96"><circle cx="48" cy="48" r="42" fill="none" stroke="var(--line)" stroke-width="8"/>
           <circle id="ringArc" cx="48" cy="48" r="42" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9" style="transition:stroke-dashoffset .5s"/></svg>
-        <div class="num"><div><b id="dayNum">1</b><small>of 75</small></div></div>
+        <div class="num"><div><b id="dayNum">1</b><small>days in</small></div></div>
       </div>
       <div class="stats">
-        <div class="stat"><b id="sFull">0</b><span>perfect days</span></div>
-        <div class="stat"><b id="sStreak">0</b><span>current streak</span></div>
-        <div class="stat"><b id="sBest">0</b><span>best streak</span></div>
-        <div class="stat"><b id="sLeft">75</b><span>days to go</span></div>
+        <div class="stat"><b id="sLeft">75</b><span>days remaining</span></div>
       </div>
     </div>
     <p id="sMile" class="mile-line"></p>
@@ -401,7 +399,6 @@ function render(){
     if(dayStatus(n) === "full") streak++;
     else if(n === t) continue; else break;
   }
-  $("sFull").textContent = full; $("sStreak").textContent = streak; $("sBest").textContent = best;
   $("sLeft").textContent = Math.max(0, TOTAL - Math.max(t,0));
 
   // banner
@@ -731,7 +728,7 @@ $("restoreCode").onclick = () => {
    comes back to the front, ask GitHub for the latest version number and
    reload onto a fresh URL if it has changed. Progress is in localStorage, so
    nothing is lost. */
-const APP_VERSION = "20261112065731";
+const APP_VERSION = "20261112070047";
 async function checkForUpdate(){
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
