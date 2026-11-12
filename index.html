@@ -112,11 +112,15 @@
   .acts{display:flex;gap:8px;margin-top:8px}
   .act{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;cursor:pointer}
   .act.sel{background:var(--done);border-color:var(--done);color:#fff;font-weight:600}
-  .tstats{display:grid;grid-template-columns:1fr 1fr;text-align:center}
-  .tstats div+div{border-left:1px solid var(--line)}
-  .tstats b{display:block;font-size:32px;line-height:1.1}
-  .tstats span{font-size:13px;color:var(--muted)}
-  .tweek{margin:12px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+  .thead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .thead span{font-size:20px;font-weight:700}
+  .segbar{display:flex;gap:6px}
+  .segbar i{flex:1;height:16px;border-radius:8px;background:var(--bg);border:1px solid var(--line);transition:background .3s}
+  .segbar i.on{background:var(--accent);border-color:var(--accent)}
+  .segbar i.hit{background:var(--done);border-color:var(--done)}
+  .segbar i.extra{flex:.5}
+  .tmsg{margin:10px 0 12px;font-size:14px}
+  .tfoot{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .banner{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:12px}
@@ -205,12 +209,10 @@
     </div>
 
     <div class="card" id="trainingCard">
-      <p class="label">Training</p>
-      <div class="tstats">
-        <div><b id="tGym">0</b><span>🏋️ Gym days</span></div>
-        <div><b id="tWalk">0</b><span>🚶 Walk days</span></div>
-      </div>
-      <p class="tweek" id="tWeek"></p>
+      <div class="thead"><p class="label" style="margin:0">Weights this week</p><span id="tCount">0 / 4</span></div>
+      <div class="segbar" id="tBar"></div>
+      <p class="tmsg" id="tMsg"></p>
+      <div class="tfoot"><span id="tWalkWeek">🚶 0 walks this week</span><span id="tTotals">All time: 0 gym · 0 walk</span></div>
     </div>
 
     <div class="card hidden" id="weightsCard">
@@ -247,6 +249,7 @@
   <div class="dlg-head"><h2>Settings</h2><button class="close-x" id="closeSettings" aria-label="Close settings">✕</button></div>
   <div class="field"><label for="setStart">Day 1</label><div class="datebox"><input type="date" id="setStart"></div></div>
   <div class="field"><label for="setWater">Daily water goal in litres (split across 2 bottles)</label><input type="number" id="setWater" min="0.5" max="8" step="0.5" inputmode="decimal"></div>
+  <div class="field"><label for="setGym">Gym (weights) sessions per week</label><input type="number" id="setGym" min="1" max="7" inputmode="numeric"></div>
   <div class="field"><label for="setUnit">Weight unit</label><input type="text" id="setUnit" maxlength="5" placeholder="kg"></div>
   <p class="label">Daily rules</p>
   <div id="setRules"></div>
@@ -388,7 +391,7 @@ $("addRule").onclick = () => { draftRules.push(newRule()); ruleEditor($("setupRu
 $("begin").onclick = () => {
   const rules = cleanRules(draftRules);
   if(!rules.length) return alertBanner("Add at least one rule.");
-  S = {start:$("startDate").value || isoLocal(new Date()), rules, waterGoal:2, waterL:2, unit:"kg", days:{}};
+  S = {start:$("startDate").value || isoLocal(new Date()), rules, waterGoal:2, waterL:2, gymGoal:4, unit:"kg", days:{}};
   store.save(S); boot();
 };
 
@@ -532,8 +535,17 @@ function renderTraining(){
     const inWeek = dayDate(+n) >= monday;
     if(d.activity === "gym"){ gym++; if(inWeek) wg++; } else if(d.activity === "walk"){ walk++; if(inWeek) ww++; }
   }
-  $("tGym").textContent = gym; $("tWalk").textContent = walk;
-  $("tWeek").textContent = (wg || ww) ? `This week: ${wg} gym · ${ww} walk` : "Tap Gym or Walk on your cardio each day to track it here.";
+  const goal = S.gymGoal || 4;
+  $("tCount").textContent = `${wg} / ${goal}`;
+  $("tBar").innerHTML = Array.from({length: Math.max(goal, wg)}, (_, i) => `<i class="${i < wg ? (wg >= goal ? "hit" : "on") : ""}${i >= goal ? " extra" : ""}"></i>`).join("");
+  const sun = new Date(monday); sun.setDate(monday.getDate() + 6);
+  const daysLeft = Math.round((sun - today) / 86400000) + 1;  // including today
+  const need = goal - wg;
+  $("tMsg").textContent = wg >= goal ? (wg > goal ? `Goal smashed: ${wg} sessions this week 💪` : "Weekly goal hit 💪")
+    : need > daysLeft ? `${need} to go, with ${daysLeft} day${daysLeft===1?"":"s"} left this week`
+    : `${need} more session${need===1?"":"s"} to go · ${daysLeft} day${daysLeft===1?"":"s"} left this week`;
+  $("tWalkWeek").textContent = `🚶 ${ww} walk${ww===1?"":"s"} this week`;
+  $("tTotals").textContent = `All time: ${gym} gym · ${walk} walk`;
 }
 
 function renderWeights(){
@@ -640,7 +652,7 @@ function alertBanner(msg){ const b = document.createElement("div"); b.className=
 /* ---------- settings ---------- */
 let editRules = [];
 $("openSettings").onclick = () => {
-  $("setStart").value = S.start; $("setWater").value = S.waterL; $("setUnit").value = S.unit || "kg";
+  $("setStart").value = S.start; $("setWater").value = S.waterL; $("setUnit").value = S.unit || "kg"; $("setGym").value = S.gymGoal || 4;
   editRules = S.rules.map(r => ({...r})); ruleEditor($("setRules"), editRules);
   $("settings").showModal();
 };
@@ -656,6 +668,7 @@ $("saveSettings").onclick = () => {
   const wr = rules.find(r => r.water);
   if(wr && /^Drink [\d.]+ ?L of water$/.test(wr.title)) wr.title = `Drink ${fmtL(S.waterL)} of water`;
   S.unit = $("setUnit").value.trim() || "kg";
+  S.gymGoal = Math.min(7, Math.max(1, Math.round(+$("setGym").value) || 4));
   S.rules = rules; store.save(S); $("settings").close(); boot();
 };
 $("resetBtn").onclick = () => {
@@ -777,7 +790,7 @@ $("restoreCode").onclick = () => {
    comes back to the front, ask GitHub for the latest version number and
    reload onto a fresh URL if it has changed. Progress is in localStorage, so
    nothing is lost. */
-const APP_VERSION = "20261112070220";
+const APP_VERSION = "20261112070422";
 async function checkForUpdate(){
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
