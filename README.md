@@ -24,3 +24,6 @@ On your phone, open that link and choose **Add to Home Screen** to use it like a
 
 ## Releasing changes
 Run `./release.sh` before committing. It stamps a new version so installed home-screen apps reload onto the update automatically.
+
+## Backups
+Settings → Backup & restore: save a backup file (share sheet on phones), copy a backup code, restore from either, or roll back to one of the last 14 automatic restore points.

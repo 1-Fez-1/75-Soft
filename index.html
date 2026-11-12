@@ -99,6 +99,15 @@
   .entry b{font-size:14px}
   .entry b small{color:var(--muted);font-weight:400;margin-left:6px}
   .entry p{margin:3px 0 0;font-size:14px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .hint{font-size:13px;color:var(--muted);margin:6px 2px 12px}
+  .btn.wide,.btn.ghost.wide{width:100%}
+  .bk-status{background:var(--bg);border-radius:12px;padding:10px 14px;font-size:14px;margin:0 0 16px}
+  .bk-status.warn{background:var(--accent-soft)}
+  .snap{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px;border-top:1px solid var(--line);font-size:14px}
+  .snap:first-child{border-top:0}
+  .snap small{display:block;color:var(--muted);font-size:12px}
+  .snap button{padding:7px 12px}
+  .nudge{display:block;width:100%;margin:-6px 0 14px;background:var(--accent-soft);border:0;border-radius:12px;padding:10px 14px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .banner{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:12px}
@@ -145,6 +154,7 @@
     <div id="setupRules"></div>
     <button class="btn ghost" id="addRule" style="margin-bottom:16px">+ Add rule</button>
     <button class="btn" id="begin">Begin</button>
+    <button class="btn ghost wide" id="setupRestore" style="margin-top:10px">Restore from a backup</button>
   </section>
 
   <!-- App -->
@@ -163,6 +173,7 @@
       </div>
     </div>
     <p id="sMile" class="mile-line"></p>
+    <button id="backupNudge" class="nudge hidden">💾 It's been a while since your last backup. <b>Back up now</b></button>
 
     <div class="card">
       <div id="banner" class="banner hidden"></div>
@@ -226,15 +237,37 @@
   <div id="setRules"></div>
   <button class="btn ghost" id="setAddRule" style="margin-bottom:18px">+ Add rule</button>
   <p class="label">Backup</p>
-  <div class="row" style="margin-bottom:18px">
-    <button class="btn ghost" id="exportBtn">Export data</button>
-    <button class="btn ghost" id="importBtn">Import data</button>
-    <input type="file" id="importFile" accept="application/json" class="hidden">
-  </div>
+  <button class="btn ghost" id="openBackup" style="width:100%;margin-bottom:18px;text-align:left">💾 Backup &amp; restore <span id="backupStatusShort" style="float:right;color:var(--muted)"></span></button>
   <div class="row" style="justify-content:space-between">
     <button class="btn danger" id="resetBtn">Reset challenge</button>
     <div class="row"><button class="btn ghost" id="cancelSettings">Cancel</button><button class="btn" style="width:auto" id="saveSettings">Save</button></div>
   </div>
+</div></dialog>
+
+<dialog id="backup"><div class="inner">
+  <div class="dlg-head"><h2>Backup &amp; restore</h2><button class="close-x" id="closeBackup" aria-label="Close backup">✕</button></div>
+  <p class="bk-status" id="backupStatus"></p>
+
+  <p class="label">Back up</p>
+  <button class="btn" id="saveBackup">Save backup file</button>
+  <p class="hint">On your phone this opens the share menu, so you can save it to Files or iCloud Drive, or email it to yourself.</p>
+  <button class="btn ghost wide" id="copyBackup">Copy backup code</button>
+  <p class="hint">Copies your data as text you can paste into Notes or a message to yourself.</p>
+
+  <p class="label" style="margin-top:20px">Restore</p>
+  <div class="row">
+    <button class="btn ghost" id="restoreFileBtn">From a file</button>
+    <button class="btn ghost" id="restoreCodeBtn">From a code</button>
+  </div>
+  <input type="file" id="importFile" accept="application/json,.json,text/plain" class="hidden">
+  <div id="codeBox" class="hidden" style="margin-top:10px">
+    <textarea id="codeInput" placeholder="Paste your backup code here" style="min-height:90px"></textarea>
+    <button class="btn" id="restoreCode" style="margin-top:8px">Restore from code</button>
+  </div>
+
+  <p class="label" style="margin-top:20px">Automatic restore points</p>
+  <p class="hint" style="margin-top:-4px">Saved on this device each day you open the app, and before any reset or restore. The last 14 are kept.</p>
+  <div id="snapList"></div>
 </div></dialog>
 
 <script>
@@ -347,7 +380,9 @@ function boot(){
   $("setup").classList.add("hidden"); $("app").classList.remove("hidden"); $("openSettings").classList.remove("hidden"); $("tabbar").classList.remove("hidden"); $("journal").classList.add("hidden"); currentTab = "app"; document.querySelectorAll(".tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === "app"));
   const t = todayIndex();
   viewDay = Math.min(Math.max(t,1), TOTAL);
+  snapshot("daily");
   render();
+  updateBackupStatus();
 }
 
 function render(){
@@ -578,22 +613,116 @@ $("saveSettings").onclick = () => {
   S.rules = rules; store.save(S); $("settings").close(); boot();
 };
 $("resetBtn").onclick = () => {
-  if(!confirm("Delete all progress and start over?")) return;
+  if(!confirm("Delete all progress and start over?\n\nA restore point is saved first, so you can get it back from Backup & restore.")) return;
+  snapshot("before reset");
   try { localStorage.removeItem(KEY); } catch(e){}
   S = null; $("settings").close(); draftRules = DEFAULT_RULES.map(r => ({...r})); showSetup();
 };
-$("exportBtn").onclick = () => {
-  const blob = new Blob([JSON.stringify(S, null, 2)], {type:"application/json"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `75-soft-backup-${isoLocal(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href);
+/* ---------- backup & restore ---------- */
+const SNAP_KEY = "soft75:snapshots";
+const META_KEY = "soft75:backupMeta";
+const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch(e){ return d } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch(e){} };
+const getSnaps = () => lsGet(SNAP_KEY, []);
+const backupMeta = () => lsGet(META_KEY, {});
+function markBackedUp(){ lsSet(META_KEY, {...backupMeta(), last: Date.now()}); updateBackupStatus(); }
+function snapshot(reason){
+  if(!S) return;
+  const snaps = getSnaps(), today = isoLocal(new Date());
+  if(reason === "daily" && snaps.some(x => x.reason === "daily" && x.date === today)) return;
+  snaps.unshift({at: Date.now(), date: today, reason, data: JSON.parse(JSON.stringify(S))});
+  lsSet(SNAP_KEY, snaps.slice(0, 14));
+}
+function summary(data){
+  const perfect = Object.keys(data.days || {}).filter(n => {
+    const d = data.days[n];
+    return (data.rules || []).filter(r => {
+      if(r.weekday != null){ const dt = parseISO(data.start); dt.setDate(dt.getDate() + +n - 1); if(dt.getDay() !== r.weekday) return false; }
+      return true;
+    }).every(r => r.water ? d.water >= (data.waterGoal || 2) : r.journal ? (d.note && d.note.trim()) || d.done?.[r.id] : d.done?.[r.id]);
+  }).length;
+  const entries = Object.values(data.days || {}).filter(d => d.note && d.note.trim()).length;
+  return `${perfect} perfect day${perfect===1?"":"s"} · ${entries} journal entr${entries===1?"y":"ies"}`;
+}
+function backupPayload(){ return JSON.stringify({app:"75-soft", savedAt:new Date().toISOString(), ...S}, null, 2); }
+const toCode = str => "75SOFT:" + btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+function fromCode(code){
+  const b64 = code.trim().replace(/^75SOFT:/, "").replace(/\s+/g, "");
+  return new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+}
+function validBackup(data){ return data && typeof data.start === "string" && Array.isArray(data.rules) && data.rules.length; }
+function restoreData(data, label){
+  if(!validBackup(data)) { alert("That doesn't look like a 75 Soft backup."); return false; }
+  if(!confirm(`Restore ${label}?\n\n${summary(data)}\n\nYour current progress will be replaced. (A restore point is saved first, so you can undo this.)`)) return false;
+  snapshot("before restore");
+  const {app, savedAt, ...clean} = data;
+  S = migrate({days:{}, unit:"kg", ...clean}); store.save(S);
+  $("backup").close(); $("settings").close(); boot();
+  return true;
+}
+function ago(ms){
+  const d = Math.floor((Date.now() - ms) / 86400000);
+  return d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`;
+}
+function needsBackup(){
+  const last = backupMeta().last;
+  const used = S && Object.keys(S.days).length >= 3;
+  return used && (!last || Date.now() - last > 7 * 86400000);
+}
+function updateBackupStatus(){
+  const last = backupMeta().last;
+  const el = $("backupStatus");
+  el.textContent = last ? `Last backed up ${ago(last)}.` : "You haven't saved a backup yet. Your progress only lives on this device until you do.";
+  el.classList.toggle("warn", needsBackup() || !last);
+  $("backupStatusShort").textContent = last ? ago(last) : "never";
+  $("backupNudge").classList.toggle("hidden", !needsBackup());
+}
+function renderSnaps(){
+  const snaps = getSnaps();
+  const labels = {daily:"Start of day", "before restore":"Before restore", "before reset":"Before reset"};
+  $("snapList").innerHTML = snaps.length ? snaps.map((x,i) => `<div class="snap"><div>${new Date(x.at).toLocaleString(undefined,{weekday:"short", day:"numeric", month:"short", hour:"numeric", minute:"2-digit"})} · ${labels[x.reason] || x.reason}<small>${summary(x.data)}</small></div><button class="btn ghost" data-i="${i}">Restore</button></div>`).join("")
+    : `<p class="hint">None yet.</p>`;
+  $("snapList").querySelectorAll("button").forEach(b => b.onclick = () => restoreData(getSnaps()[+b.dataset.i].data, "this restore point"));
+}
+function openBackup(){ updateBackupStatus(); renderSnaps(); $("codeBox").classList.add("hidden"); $("backup").showModal(); }
+$("openBackup").onclick = openBackup;
+$("setupRestore").onclick = openBackup;
+$("backupNudge").onclick = openBackup;
+$("closeBackup").onclick = () => $("backup").close();
+$("backup").addEventListener("click", e => { if(e.target === $("backup")) $("backup").close(); });
+
+$("saveBackup").onclick = async () => {
+  const name = `75-soft-backup-${isoLocal(new Date())}.json`;
+  const file = new File([backupPayload()], name, {type:"application/json"});
+  try {
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:"75 Soft backup"});
+      markBackedUp(); return;
+    }
+  } catch(e){ if(e && e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  markBackedUp();
 };
-$("importBtn").onclick = () => $("importFile").click();
+$("copyBackup").onclick = async () => {
+  const code = toCode(backupPayload());
+  try { await navigator.clipboard.writeText(code); }
+  catch(e){ $("codeBox").classList.remove("hidden"); $("codeInput").value = code; $("codeInput").select(); alert("Couldn't copy automatically. The code is selected in the box, so copy it from there."); return; }
+  markBackedUp();
+  const b = $("copyBackup"), t = b.textContent; b.textContent = "Copied ✓ Paste it somewhere safe"; setTimeout(() => b.textContent = t, 2500);
+};
+$("restoreFileBtn").onclick = () => $("importFile").click();
 $("importFile").onchange = async e => {
-  const f = e.target.files[0]; if(!f) return;
-  try { const data = JSON.parse(await f.text());
-    if(!data.start || !Array.isArray(data.rules)) throw 0;
-    S = migrate({days:{}, ...data}); store.save(S); $("settings").close(); boot();
+  const f = e.target.files[0]; e.target.value = ""; if(!f) return;
+  try {
+    const txt = (await f.text()).trim();
+    restoreData(JSON.parse(txt.startsWith("75SOFT:") ? fromCode(txt) : txt), "this backup file");
   } catch(_) { alert("That file doesn't look like a 75 Soft backup."); }
+};
+$("restoreCodeBtn").onclick = () => { $("codeBox").classList.toggle("hidden"); $("codeInput").value = ""; $("codeInput").focus(); };
+$("restoreCode").onclick = () => {
+  try { restoreData(JSON.parse(fromCode($("codeInput").value)), "this backup code"); }
+  catch(_) { alert("That code doesn't look right. Make sure you pasted the whole thing, starting with 75SOFT:"); }
 };
 
 // refresh when the app is reopened on a new day
@@ -602,7 +731,7 @@ $("importFile").onchange = async e => {
    comes back to the front, ask GitHub for the latest version number and
    reload onto a fresh URL if it has changed. Progress is in localStorage, so
    nothing is lost. */
-const APP_VERSION = "20261112065509";
+const APP_VERSION = "20261112065731";
 async function checkForUpdate(){
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
