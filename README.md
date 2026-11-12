@@ -21,3 +21,6 @@ Milestones are marked at days 15, 30, 45, 60 and 75.
 3. Your app will be live at `https://<username>.github.io/<repo>/`
 
 On your phone, open that link and choose **Add to Home Screen** to use it like an app.
+
+## Releasing changes
+Run `./release.sh` before committing. It stamps a new version so installed home-screen apps reload onto the update automatically.

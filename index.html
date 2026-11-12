@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="75 Soft">
 <title>75 Soft</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
@@ -594,7 +597,30 @@ $("importFile").onchange = async e => {
 };
 
 // refresh when the app is reopened on a new day
-document.addEventListener("visibilitychange", () => { if(!document.hidden && S) render(); });
+/* ---------- auto-update ----------
+   Home-screen apps keep an old copy of the page. Each time the app opens or
+   comes back to the front, ask GitHub for the latest version number and
+   reload onto a fresh URL if it has changed. Progress is in localStorage, so
+   nothing is lost. */
+const APP_VERSION = "20261112065509";
+async function checkForUpdate(){
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
+    if(!r.ok) return;
+    const {v} = await r.json();
+    if(v && v !== APP_VERSION){
+      const key = "soft75:reloadedFor";
+      if(sessionStorage.getItem(key) === v) return;   // avoid reload loops
+      sessionStorage.setItem(key, v);
+      location.replace(location.pathname + "?v=" + encodeURIComponent(v));
+    }
+  } catch(e){}
+}
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+checkForUpdate();
+document.addEventListener("visibilitychange", () => { if(!document.hidden){ if(S) render(); checkForUpdate(); } });
 
 S ? boot() : showSetup();
 </script>
