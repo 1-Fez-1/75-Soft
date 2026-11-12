@@ -246,9 +246,21 @@ const DEFAULT_RULES = [
   {id:"future",  title:"10 min for future me", sub:"One small thing your future self will thank you for"},
   {id:"journal", title:"Journal entry", sub:"Tap to open the Journal tab", journal:true},
   {id:"supps",   title:"Take supplements", sub:""},
-  {id:"weigh",   title:"Weigh-in & progress photo", sub:"Every 7 days", every:7, weight:true}
+  {id:"weigh",   title:"Weigh-in & progress photo", sub:"Every Saturday", weekday:6, weight:true}
 ];
-const appliesTo = (r, n) => !r.every || n % r.every === 0;
+function appliesTo(r, n){
+  if(r.weekday != null) return dayDate(n).getDay() === r.weekday;
+  if(r.every) return n % r.every === 0;
+  return true;
+}
+const isScheduled = r => r.weekday != null || !!r.every;
+// move older saves from "every 7 days" to "every Saturday"
+function migrate(s){
+  if(!s || !Array.isArray(s.rules)) return s;
+  s.rules.forEach(r => { if(r.id === "weigh" && r.every === 7 && r.weekday == null){
+    delete r.every; r.weekday = 6; r.sub = "Every Saturday"; } });
+  return s;
+}
 const rulesFor = n => S.rules.filter(r => appliesTo(r, n));
 const isMilestone = n => n % MILESTONE === 0;
 
@@ -256,7 +268,7 @@ const store = {
   load(){ try { return JSON.parse(localStorage.getItem(KEY)) } catch(e){ return null } },
   save(s){ try { localStorage.setItem(KEY, JSON.stringify(s)) } catch(e){} }
 };
-let S = store.load();
+let S = migrate(store.load()); if(S) store.save(S);
 let viewDay = 1;
 
 const $ = id => document.getElementById(id);
@@ -413,7 +425,7 @@ function render(){
     else c.classList.add(st === "full" ? "full" : st === "part" ? "part" : (n < t ? "miss" : "x"));
     if(n === t) c.classList.add("today");
     if(isMilestone(n)) c.classList.add("mile");
-    if(S.rules.some(r => r.every && appliesTo(r, n)) && !isMilestone(n)) c.classList.add("weigh");
+    if(S.rules.some(r => isScheduled(r) && appliesTo(r, n)) && !isMilestone(n)) c.classList.add("weigh");
     if(n === viewDay) c.classList.add("sel");
     c.onclick = () => { viewDay = n; render(); window.scrollTo({top:0, behavior:"smooth"}); };
     g.appendChild(c);
@@ -556,7 +568,7 @@ $("importFile").onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   try { const data = JSON.parse(await f.text());
     if(!data.start || !Array.isArray(data.rules)) throw 0;
-    S = {waterGoal:8, days:{}, ...data}; store.save(S); $("settings").close(); boot();
+    S = migrate({waterGoal:8, days:{}, ...data}); store.save(S); $("settings").close(); boot();
   } catch(_) { alert("That file doesn't look like a 75 Soft backup."); }
 };
 

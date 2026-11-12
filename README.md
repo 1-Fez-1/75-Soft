@@ -11,7 +11,7 @@ A simple, private tracker for the 75 Soft challenge. Runs entirely in your brows
 - 10 minutes for future me
 - Journal entry
 - Take supplements
-- Weigh-in & progress photo every 7 days
+- Weigh-in & progress photo every Saturday
 
 Milestones are marked at days 15, 30, 45, 60 and 75.
 
