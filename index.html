@@ -109,6 +109,14 @@
   .snap small{display:block;color:var(--muted);font-size:12px}
   .snap button{padding:7px 12px}
   .nudge{display:block;width:100%;margin:-6px 0 14px;background:var(--accent-soft);border:0;border-radius:12px;padding:10px 14px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+  .acts{display:flex;gap:8px;margin-top:8px}
+  .act{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;cursor:pointer}
+  .act.sel{background:var(--done);border-color:var(--done);color:#fff;font-weight:600}
+  .tstats{display:grid;grid-template-columns:1fr 1fr;text-align:center}
+  .tstats div+div{border-left:1px solid var(--line)}
+  .tstats b{display:block;font-size:32px;line-height:1.1}
+  .tstats span{font-size:13px;color:var(--muted)}
+  .tweek{margin:12px 0 0;text-align:center;font-size:13px;color:var(--muted)}
   .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .banner{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:12px}
@@ -196,6 +204,15 @@
       </div>
     </div>
 
+    <div class="card" id="trainingCard">
+      <p class="label">Training</p>
+      <div class="tstats">
+        <div><b id="tGym">0</b><span>🏋️ Gym days</span></div>
+        <div><b id="tWalk">0</b><span>🚶 Walk days</span></div>
+      </div>
+      <p class="tweek" id="tWeek"></p>
+    </div>
+
     <div class="card hidden" id="weightsCard">
       <p class="label">Weigh-ins</p>
       <div id="weights"></div>
@@ -274,7 +291,7 @@ const TOTAL = 75;
 const MILESTONE = 15;
 const DEFAULT_RULES = [
   {id:"water",   title:"Drink 2 L of water", sub:"Tap a bottle each time you finish one", water:true},
-  {id:"cardio",  title:"30 min zone 2 cardio", sub:"Easy pace, you can still hold a conversation"},
+  {id:"cardio",  title:"30 min zone 2 cardio", sub:"Pick what you did today", activity:true},
   {id:"meals",   title:"Regular, balanced meals", sub:"Protein, veg, slow carbs"},
   {id:"read",    title:"Read 10 pages", sub:"Any book counts"},
   {id:"sleep",   title:"Prioritise sleep & self-care", sub:"Wind down, rest, look after you"},
@@ -283,6 +300,7 @@ const DEFAULT_RULES = [
   {id:"supps",   title:"Take supplements", sub:""},
   {id:"weigh",   title:"Weigh-in & progress photo", sub:"Every Saturday", weekday:6, weight:true}
 ];
+const ACTIVITIES = [{id:"gym", label:"Gym", icon:"🏋️"}, {id:"walk", label:"Walk", icon:"🚶"}];
 function appliesTo(r, n){
   if(r.weekday != null) return dayDate(n).getDay() === r.weekday;
   if(r.every) return n % r.every === 0;
@@ -309,6 +327,7 @@ function migrate(s){
     s.rules.forEach(r => { if(r.water && /glass/i.test(r.sub || "")) r.sub = "Tap a bottle each time you finish one"; });
   }
   s.waterGoal = 2;
+  s.rules.forEach(r => { if(r.id === "cardio" && !r.activity){ r.activity = true; r.sub = "Pick what you did today"; } });
   s.rules.forEach(r => { if(r.id === "weigh" && r.every === 7 && r.weekday == null){
     delete r.every; r.weekday = 6; r.sub = "Every Saturday"; } });
   return s;
@@ -439,6 +458,7 @@ function render(){
     el.innerHTML = `<div class="check"></div><div class="t"><b>${esc(r.title)}</b>${r.sub?`<span>${esc(r.sub)}</span>`:""}
       ${r.water ? `<div class="water">${Array.from({length:S.waterGoal},(_,i)=>{ const f = i < (S.days[viewDay]?.water||0);
         return `<button class="bottle${f?" f":""}" data-i="${i}" aria-label="Bottle ${i+1}${f?", done":""}">${bottleSVG(i,f)}<span>${fmtL(S.waterL/2)}</span></button>`; }).join("")}</div>` : ""}
+      ${r.activity ? `<div class="acts">${ACTIVITIES.map(a => `<button class="act${S.days[viewDay]?.activity === a.id ? " sel" : ""}" data-act="${a.id}">${a.icon} ${a.label}</button>`).join("")}</div>` : ""}
       ${r.weight ? `<div class="weight"><input type="number" step="0.1" inputmode="decimal" placeholder="Weight" value="${w}"> <span>${S.unit||"kg"}</span></div>` : ""}</div>`;
     if(r.weight){
       const inp = el.querySelector("input");
@@ -454,6 +474,16 @@ function render(){
       if(viewDay > todayIndex()) return;
       const rd = rec(viewDay);
       if(r.journal){ showTab("journal"); $("note").focus(); return; }
+      if(r.activity){
+        const act = e.target.closest("[data-act]")?.dataset.act;
+        if(act){ rd.activity = rd.activity === act ? undefined : act; rd.done[r.id] = !!rd.activity; }
+        else { rd.done[r.id] = !rd.done[r.id]; if(!rd.done[r.id]) delete rd.activity; }
+        if(!rd.activity) delete rd.activity;
+        const wasFull2 = el.dataset.full === "1";
+        store.save(S); render();
+        if(!wasFull2 && dayStatus(viewDay) === "full") celebrate(isMilestone(viewDay));
+        return;
+      }
       if(r.water){
         const gi = e.target.closest("[data-i]")?.dataset.i;
         if(gi !== undefined){ const v = +gi + 1; rd.water = rd.water === v ? v - 1 : v; }
@@ -485,6 +515,25 @@ function render(){
     g.appendChild(c);
   }
   renderWeights();
+  renderTraining();
+}
+
+function renderTraining(){
+  const t = todayIndex();
+  const has = S.rules.some(r => r.activity);
+  $("trainingCard").classList.toggle("hidden", !has);
+  if(!has) return;
+  let gym = 0, walk = 0, wg = 0, ww = 0;
+  // "this week" = Monday to Sunday containing today
+  const today = new Date(new Date().toDateString());
+  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  for(const [n, d] of Object.entries(S.days)){
+    if(!d.activity || +n > t) continue;
+    const inWeek = dayDate(+n) >= monday;
+    if(d.activity === "gym"){ gym++; if(inWeek) wg++; } else if(d.activity === "walk"){ walk++; if(inWeek) ww++; }
+  }
+  $("tGym").textContent = gym; $("tWalk").textContent = walk;
+  $("tWeek").textContent = (wg || ww) ? `This week: ${wg} gym · ${ww} walk` : "Tap Gym or Walk on your cardio each day to track it here.";
 }
 
 function renderWeights(){
@@ -728,7 +777,7 @@ $("restoreCode").onclick = () => {
    comes back to the front, ask GitHub for the latest version number and
    reload onto a fresh URL if it has changed. Progress is in localStorage, so
    nothing is lost. */
-const APP_VERSION = "20261112070047";
+const APP_VERSION = "20261112070220";
 async function checkForUpdate(){
   try {
     const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
